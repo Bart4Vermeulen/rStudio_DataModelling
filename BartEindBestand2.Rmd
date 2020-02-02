@@ -1,0 +1,223 @@
+---
+title: "Notebook Bart Vermeulen 2019"
+date: "Oktober 2019"
+output:
+  html_document: default
+  pdf_document: default
+From: Bart Vermeulen
+---
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(DBI)
+```
+
+
+Lees het excel bestand in
+```{r setup2, include=FALSE}
+
+# Verander de bestandsnaam als je een andere excel gaat toepassen
+df <- read_excel("Oefen dataset.xlsx")
+
+# aanpassen als een andere excel gebruikt gaat worden dan bovenstaande. 
+df <- drop_na(df, 'KlantID')
+
+```
+
+<h2>SQL initialiseren </h2>
+```{r}
+
+#Onderstaande niet veranderen !
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+
+
+#Als er in de tabel variabelen met datums voorkomen, dan moeten die aangepast worden zodat de datumvelden alst teksttype worden opgeslagen en niet als datumtijd type. Zie onderstaand voorbeeld: copy_to(con, mutate_at(df, vars(ends_with("datum")), as.character), "factOrders")
+#copy_to(con, mutate_at(df, vars(ends_with("datum")), as.character), "factOrders")
+copy_to(con,df, "MijnTabel")
+
+
+knitr::opts_chunk$set(connection = "con")
+
+```
+
+```{sql, , connection = "con", output.var = "df_result"}
+select *
+from MijnTabel
+```
+
+
+
+<h1>(SQL) 1. Welke verschillende producten zijn er verkocht in 2013?</h1>
+```{sql, connection = "con"}
+SELECT 
+  DISTINCT Product
+from 
+  MijnTabel
+where Jaar = 2013
+order by
+  Product
+
+```
+<br>
+<p1>Hier kunnen we zien wat voor verschillende producten er verkocht zijn, dit betekent niet dat dit alleen de producten zijn wie we hebben (stel je hebt producten die nog niet verkocht zijn).</p1>
+
+
+<h1>(SQL) 2.Hoeveel verschillende leeftijden die een product hebben gekocht</h1>
+```{sql, connection = "con"}
+select COUNT(DISTINCT leeftijd) as "Verschillende leeftijden klanten"
+from MijnTabel
+```
+<br>
+<p1>Totaal hebben dus 70 verschillende leeftijden van klanten iets gekocht bij de groothandel.</p1>
+<br>
+<p1>Dit kunnen dus allerlei producten zijn, niet alleen fietsen.</p1>
+
+
+<h1>(SQL) 3. Groote bereik van groothandel Jip en Janneke</h1>
+```{sql, , connection = "con"}
+select COUNT(DISTINCT Land) as "Hoeveelheid landen waar producten gekocht zijn."
+from MIJNTABEL
+```
+<br>
+<p1>Deze groothandel is dus niet alleen actief in 1 land maar in meerdere landen.</p1>
+<br>
+<p1>Hieruit kunnen we dus opmaken dat deze groothandel een multinational is.</p1>
+
+
+<h1>(SQL) 4. Gemiddelde winst voor Accessoires</h1>
+```{sql, , connection = "con"}
+select ROUND(AVG(Winst), 2) as "Gemiddelde Winst"
+from MijnTabel
+where productcategorie = "Accessories"
+```
+<br>
+<p1>Hierboven zien we de gemiddelde winst per bestelling voor Accessories in euro's.</p1>
+
+
+<h1>(SQL) 5. Welke staten van landen worden er allemaal producten in verkocht?</h1>
+```{sql, , connection = "con"}
+select distinct staat, land
+from MijnTabel
+where staat is not null
+order by
+land
+```
+<br>
+<p1>We hadden al gekeken in hoeveel landen de groothandel actief was, maar hier kijken we in welke landen en staten de groothandel actief is.</p1>
+
+```{sql, , connection = "con", output.var = "ggplot1"}
+select distinct KlantID, Leeftijd
+from MijnTabel
+```
+<h1>(GGPLOT2) 1. Leeftijden van klanten </h1>
+```{r}
+ggplot(ggplot1, aes(KlantID, Leeftijd)) +
+  geom_point()
+```
+<br>
+<p1>Hierboven is een grafiek gemaakt, zo kun je zien welke leeftijd het meest een product koopt, per bestelling is er 1 punt geplaatst.
+<br>
+<p1>Uit dit schema zien we dus dat vooral mensen tussen 20 en 30 jaar een fiets kopen, en er maar enkele boven de 60 een fiets kopen.</p1>
+
+<h1>(GGPLOT2) 2. Leeftijd van klanten die producten hebben gekocht</h1>
+```{r}
+ggplot(ggplot1, aes(KlantID, Leeftijd)) +
+  geom_smooth()
+```
+<br>
+<p1>Hier zien we de leeftijden van onze klanten in een gemiddelde lijn en de uitloop.</p1>
+
+<h1>(GGPLOT2) 3. De opbrengst ten opzichten van de kosten</h1>
+```{r}
+ggplot(df_result, aes(Kosten, Opbrengst)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth()
+```
+<p1></p1>
+<br>
+
+<h1>(GGPLOT2) 4. De opbrengst ten opzichten van de kosten per categorie</h1>
+```{r}
+ggplot(df_result, aes(x = Kosten, y = Opbrengst)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth() +
+  facet_grid(. ~ ProductCategorie) +
+  scale_y_continuous(limits = c(0,20000))
+```
+<br>
+<p1>Hier hebben we bijna hetzelfde als bij nummer 3 alleen kijken we nu per categorie.</p1>
+```{sql, , connection = "con", output.var = "ggplot5"}
+select distinct KlantID, Winst
+from MijnTabel
+```
+<h1>(GGPLOT2) 5.De winst per klant</h1>
+```{r}
+ggplot(ggplot5, aes(KlantID, Winst)) +
+  geom_col() +
+  scale_y_continuous(limits = c(0,20000))
+```
+<p1>Eigenlijk wat we nu hier zien is de winst die we per klant in totaal hebben gemaakt.</p1>
+<br>
+
+<p1></p1>
+<br>
+
+<h1>(TidyVerse) 1.Meeste winst per bestelling</h1>
+```{r}
+df_result %>% 
+  arrange(desc(Winst)) %>%
+  head(20)
+```
+<br>
+<p1>Hierboven wordt de top 20 bestellingen getoont met de meeste winst.</p1>
+ 
+<h1>(TidyVerse) 2.Meeste winst op fietsen</h1>
+```{r}
+df_result %>%
+  filter(ProductCategorie == "Bikes") %>%
+  arrange(desc(Winst)) %>%
+  head(20)
+```
+<br>
+<p1>Hierboven hebben we de top 20 fiets bestellingen met de meeste winst</p1>
+ 
+<h1>(TidyVerse) 3. Gemiddelde winst per unit</h1>
+```{r}
+df_result %>% 
+  mutate(GemWinstPerUnit = Winst / OrderAantal) %>%
+  head(20)
+```
+<br>
+<p1>Hierboven wordt ook de gemiddelde winst per unit in een bestelling berekent.</p1>
+ 
+<h1>(TidyVerse) 4.Gemiddelde winst per unit bij fietsen</h1>
+```{r}
+df_result %>% 
+  filter(ProductCategorie == "Bikes") %>%
+  mutate(GemWinstPerUnit = Winst / OrderAantal) %>%
+  head(20)
+```
+<br>
+<p1>Hierboven wordt ook de gemiddelde winst per unit in een bestelling waar fietsen zijn bestelt berekent.</p1>
+ 
+<h1>(TidyVerse) 5.Meeste winst per unit in juli 2015</h1>
+```{r}
+df_result %>%
+  filter(Maand == "juli", Jaar == 2015) %>%
+  mutate(GemWinstPerUnit = Winst / OrderAantal) %>%
+  arrange(desc(GemWinstPerUnit)) %>%
+  head(20)
+```
+<br>
+<p1>De 20 beste winst bestellingen in juli 2015.</p1>
+
+<h1>(TidyVerse) 6.Meeste winst bij vrouwen</h1>
+```{r}
+df_result %>%
+  filter(KlantGeslacht == "F") %>%
+  arrange(desc(Winst)) %>%
+  head(20)
+```
+<br>
+<p1>De meeste winst bij bestellingen geplaats door een vrouw.</p1>
